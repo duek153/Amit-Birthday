@@ -985,6 +985,41 @@
     showThanks(entry.name);
   });
 
+  function buildSummary(rows){
+    var body = rows.slice(1);
+    var totalComing = 0, totalNotComing = 0, totalMaybe = 0, notDrinking = 0;
+    var drinkTotals = { "יין לבן": 0, "וודקה": 0, "ג'ין": 0, "ערק": 0 };
+    body.forEach(function(row){
+      var status = row[2];
+      var guests = parseInt(row[3], 10) || 0;
+      var drinksStr = String(row[4] || "");
+      if (status === "מגיע/ה") totalComing += guests || 1;
+      else if (status === "לא מגיע/ה") totalNotComing += 1;
+      else totalMaybe += 1;
+      drinksStr.split(",").forEach(function(part){
+        var m = part.trim().match(/^(.*)\sx(\d+)$/);
+        if (!m) return;
+        var dname = m[1].trim();
+        var qty = parseInt(m[2], 10) || 0;
+        if (dname === "לא שותה") notDrinking += qty;
+        else if (Object.prototype.hasOwnProperty.call(drinkTotals, dname)) drinkTotals[dname] += qty;
+      });
+    });
+    var totalDrinking = drinkTotals["יין לבן"] + drinkTotals["וודקה"] + drinkTotals["ג'ין"] + drinkTotals["ערק"];
+    return [
+      ["מדד", "ערך"],
+      ["סה\"כ מגיעים", totalComing],
+      ["סה\"כ לא מגיעים", totalNotComing],
+      ["סה\"כ אעדכן בהמשך", totalMaybe],
+      ["סה\"כ שותים", totalDrinking],
+      ["סה\"כ לא שותים", notDrinking],
+      ["יין לבן", drinkTotals["יין לבן"]],
+      ["וודקה", drinkTotals["וודקה"]],
+      ["ג'ין", drinkTotals["ג'ין"]],
+      ["ערק", drinkTotals["ערק"]]
+    ];
+  }
+
   document.getElementById("export-btn").addEventListener("click", function(){
     var btn = this;
     askPassword("סיסמה להורדת הרשימה:").then(function(pw){
@@ -1003,7 +1038,9 @@
             return;
           }
           var ws = XLSX.utils.aoa_to_sheet(rows);
+          var wsSummary = XLSX.utils.aoa_to_sheet(buildSummary(rows));
           var wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, wsSummary, "סיכום");
           XLSX.utils.book_append_sheet(wb, ws, "אישורים");
           XLSX.writeFile(wb, "רשימת-אורחים-יומולדת-28.xlsx");
         })
