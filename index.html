@@ -986,13 +986,23 @@
   });
 
   function buildSummary(rows){
+    var header = rows[0] || [];
     var body = rows.slice(1);
+    function colIndex(name){
+      for (var i = 0; i < header.length; i++){
+        if (String(header[i]).trim() === name) return i;
+      }
+      return -1;
+    }
+    var statusIdx = colIndex("סטטוס");
+    var guestsIdx = colIndex("מספר אורחים");
+    var drinksIdx = colIndex("שתייה");
     var totalComing = 0, totalNotComing = 0, totalMaybe = 0, notDrinking = 0;
     var drinkTotals = { "יין לבן": 0, "וודקה": 0, "ג'ין": 0, "ערק": 0 };
     body.forEach(function(row){
-      var status = row[2];
-      var guests = parseInt(row[3], 10) || 0;
-      var drinksStr = String(row[4] || "");
+      var status = statusIdx >= 0 ? row[statusIdx] : "";
+      var guests = guestsIdx >= 0 ? (parseInt(row[guestsIdx], 10) || 0) : 0;
+      var drinksStr = drinksIdx >= 0 ? String(row[drinksIdx] || "") : "";
       if (status === "מגיע/ה") totalComing += guests || 1;
       else if (status === "לא מגיע/ה") totalNotComing += 1;
       else totalMaybe += 1;
@@ -1037,12 +1047,20 @@
             customAlert("אין עדיין אישורים ברשימה.");
             return;
           }
+          var header = rows[0] || [];
+          var required = ["תאריך", "שם", "סטטוס", "מספר אורחים", "שתייה", "הערות"];
+          var missing = required.filter(function(name){
+            return header.indexOf(name) === -1 && header.map(function(h){ return String(h).trim(); }).indexOf(name) === -1;
+          });
           var ws = XLSX.utils.aoa_to_sheet(rows);
           var wsSummary = XLSX.utils.aoa_to_sheet(buildSummary(rows));
           var wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, wsSummary, "סיכום");
           XLSX.utils.book_append_sheet(wb, ws, "אישורים");
           XLSX.writeFile(wb, "רשימת-אורחים-יומולדת-28.xlsx");
+          if (missing.length){
+            customAlert("שים לב: בשורה הראשונה בגיליון חסרות העמודות: " + missing.join(", ") + ". בגלל זה הסיכום לא מלא. תקן את הכותרות בגיליון עצמו לתאמה מדויקת (כולל רווחים) ונסה שוב.");
+          }
         })
         .catch(function(){
           btn.textContent = original;
