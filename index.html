@@ -171,6 +171,14 @@
   }
   .cd-label{ font-size:11px; color:var(--ivory-dim); letter-spacing:.06em; }
 
+  .tally{
+    text-align:center;
+    font-size:13px;
+    color:var(--ivory-dim);
+    margin-top:16px;
+  }
+  .tally b{ color:var(--gold-bright); font-family:'Frank Ruhl Libre',serif; font-size:15px; }
+
   /* ---------- panel ---------- */
   .panel{
     background:var(--surface);
@@ -540,6 +548,7 @@
       <div class="cd-cell"><span class="cd-num" id="cd-h">00</span><span class="cd-label">שעות</span></div>
       <div class="cd-cell"><span class="cd-num" id="cd-d">00</span><span class="cd-label">ימים</span></div>
     </div>
+    <p class="tally" id="tally"></p>
   </div>
 
   <div class="divider"><span class="rule"></span><span class="gem"></span><span class="rule"></span></div>
@@ -787,6 +796,12 @@
   }
   tickCountdown();
   setInterval(tickCountdown, 1000);
+
+  /* ---------------- public confirmed-guests tally ---------------- */
+  jsonp(SHEET_WEBHOOK_URL + "?count=1").then(function(res){
+    if (!res || typeof res.total !== "number" || res.total <= 0) return;
+    document.getElementById("tally").innerHTML = "<b>" + res.total + "</b> אורחים כבר אישרו הגעה";
+  }).catch(function(){});
 
   /* ---------------- calendar + waze links ---------------- */
   function two(n){ return String(n).padStart(2,"0"); }
