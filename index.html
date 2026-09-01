@@ -1040,15 +1040,16 @@
   function buildSummary(rows){
     var header = rows[0] || [];
     var body = rows.slice(1);
-    function colIndex(name){
+    function colIndex(names){
       for (var i = 0; i < header.length; i++){
-        if (String(header[i]).trim() === name) return i;
+        var h = String(header[i]).trim();
+        if (names.indexOf(h) !== -1) return i;
       }
       return -1;
     }
-    var statusIdx = colIndex("סטטוס");
-    var guestsIdx = colIndex("מספר אורחים");
-    var drinksIdx = colIndex("שתייה");
+    var statusIdx = colIndex(["סטטוס"]);
+    var guestsIdx = colIndex(["מספר אורחים", "כמות מגיעים", "אורחים"]);
+    var drinksIdx = colIndex(["שתייה", "שתיה", "אלכוהול"]);
     var totalComing = 0, totalNotComing = 0, totalMaybe = 0, notDrinking = 0;
     var drinkTotals = { "יין לבן": 0, "וודקה": 0, "ג'ין": 0, "ערק": 0 };
     body.forEach(function(row){
