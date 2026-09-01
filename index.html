@@ -643,6 +643,19 @@
   var HOST_PHONE = "972509535349"; // פורמט בינלאומי, בלי + ובלי 0 מוביל
   var EVENT_DATE = new Date(2026, 8, 17, 20, 30, 0); // 17.9.2026, 20:30
   var ADDRESS = "אריה ורשבסקי 1";
+  var SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwfffsrhKxnxyd6fMN3PX0LqTb0K0SMHTsKcmlaHKsn-ikYVYgW8gU7fisfnr2P0Zd5/exec";
+
+  function logToSheet(entry){
+    if (!SHEET_WEBHOOK_URL) return;
+    try {
+      fetch(SHEET_WEBHOOK_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(entry)
+      }).catch(function(){});
+    } catch(e){}
+  }
 
   /* ---------------- modal (replaces native alert) ---------------- */
   var modalOverlay = document.getElementById("modal-overlay");
@@ -915,6 +928,7 @@
       drinks: drinksSummary,
       notes: document.getElementById("f-notes").value.trim()
     };
+    logToSheet(entry);
     sendViaWhatsApp(entry);
   });
 
