@@ -1079,6 +1079,7 @@
   var adminUnlocked = false;
   var adminPw = null;
   var adminData = []; // rows excluding header, each a raw array from the sheet
+  var adminCols = null; // resolved column indices for the current header
 
   function statusOptionsHtml(current){
     var options = ["מגיע/ה", "לא מגיע/ה", "אעדכן בהמשך"];
@@ -1092,13 +1093,19 @@
       adminRowsEl.innerHTML = '<p class="admin-empty">עדיין אין אישורים.</p>';
       return;
     }
+    var c = adminCols;
     adminRowsEl.innerHTML = adminData.map(function(row, idx){
+      var name = c.name >= 0 ? row[c.name] : "";
+      var status = c.status >= 0 ? row[c.status] : "";
+      var guests = c.guests >= 0 ? (parseInt(row[c.guests], 10) || 0) : 0;
+      var drinks = c.drinks >= 0 ? row[c.drinks] : "";
+      var notes = c.notes >= 0 ? row[c.notes] : "";
       return '<div class="admin-row" data-idx="' + idx + '">' +
-        '<input type="text" class="admin-name" value="' + escapeHtml(row[1]) + '" placeholder="שם">' +
-        '<select class="admin-status">' + statusOptionsHtml(row[2]) + '</select>' +
-        '<input type="number" class="admin-guests" min="0" value="' + (parseInt(row[3], 10) || 0) + '">' +
-        '<input type="text" class="admin-drinks" value="' + escapeHtml(row[4]) + '" placeholder="שתייה">' +
-        '<input type="text" class="admin-notes" value="' + escapeHtml(row[5]) + '" placeholder="הערות">' +
+        '<input type="text" class="admin-name" value="' + escapeHtml(name) + '" placeholder="שם">' +
+        '<select class="admin-status">' + statusOptionsHtml(status) + '</select>' +
+        '<input type="number" class="admin-guests" min="0" value="' + guests + '">' +
+        '<input type="text" class="admin-drinks" value="' + escapeHtml(drinks) + '" placeholder="שתייה">' +
+        '<input type="text" class="admin-notes" value="' + escapeHtml(notes) + '" placeholder="הערות">' +
         '<button type="button" class="admin-delete-btn">מחק</button>' +
         '</div>';
     }).join("");
@@ -1115,6 +1122,7 @@
   function loadAdminRows(){
     return jsonp(SHEET_WEBHOOK_URL + "?pw=" + encodeURIComponent(adminPw)).then(function(rows){
       if (rows && rows.error) throw new Error("forbidden");
+      adminCols = resolveColumns(rows[0] || []);
       adminData = rows.slice(1);
       renderAdminRows();
     });
@@ -1143,17 +1151,16 @@
 
   document.getElementById("admin-save-btn").addEventListener("click", function(){
     var rowEls = adminRowsEl.querySelectorAll(".admin-row");
+    var c = adminCols;
     var newRows = Array.prototype.map.call(rowEls, function(rowEl){
       var idx = parseInt(rowEl.dataset.idx, 10);
-      var orig = adminData[idx] || [];
-      return [
-        orig[0] || "",
-        rowEl.querySelector(".admin-name").value.trim(),
-        rowEl.querySelector(".admin-status").value,
-        rowEl.querySelector(".admin-guests").value,
-        rowEl.querySelector(".admin-drinks").value.trim(),
-        rowEl.querySelector(".admin-notes").value.trim()
-      ];
+      var row = (adminData[idx] || []).slice();
+      if (c.name >= 0) row[c.name] = rowEl.querySelector(".admin-name").value.trim();
+      if (c.status >= 0) row[c.status] = rowEl.querySelector(".admin-status").value;
+      if (c.guests >= 0) row[c.guests] = rowEl.querySelector(".admin-guests").value;
+      if (c.drinks >= 0) row[c.drinks] = rowEl.querySelector(".admin-drinks").value.trim();
+      if (c.notes >= 0) row[c.notes] = rowEl.querySelector(".admin-notes").value.trim();
+      return row;
     });
     var saveBtn = document.getElementById("admin-save-btn");
     var original = saveBtn.textContent;
