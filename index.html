@@ -491,6 +491,49 @@
     font-family:'Assistant',sans-serif;
   }
   .export-link:hover{ color:var(--gold); }
+
+  .admin-panel{
+    margin-top:16px;
+    padding:18px;
+    background:var(--surface);
+    border:1px solid var(--line-soft);
+    border-radius:4px;
+  }
+  .admin-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    align-items:center;
+    padding:10px 0;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .admin-row:last-child{ border-bottom:none; }
+  .admin-row input, .admin-row select{
+    background:var(--surface-2);
+    border:1px solid var(--line-soft);
+    border-radius:3px;
+    color:var(--ivory);
+    padding:8px;
+    font-family:'Assistant',sans-serif;
+    font-size:13px;
+  }
+  .admin-row .admin-name{ flex:1.4; min-width:90px; }
+  .admin-row .admin-status{ flex:1; min-width:95px; }
+  .admin-row .admin-guests{ width:50px; text-align:center; }
+  .admin-row .admin-drinks{ flex:1.6; min-width:120px; }
+  .admin-row .admin-notes{ flex:1.4; min-width:100px; }
+  .admin-delete-btn{
+    background:none;
+    border:1px solid var(--wine-bright);
+    color:var(--wine-bright);
+    border-radius:3px;
+    padding:8px 10px;
+    font-size:12px;
+    cursor:pointer;
+    font-family:'Assistant',sans-serif;
+  }
+  .admin-empty{ color:var(--ivory-dim); font-size:13px; text-align:center; padding:10px 0; }
+  .admin-panel .btn-row{ margin-top:16px; }
 </style>
 </head>
 <body>
@@ -643,6 +686,15 @@
   </div>
 
   <button class="export-link" id="export-btn" type="button">הורדת רשימת האישורים (Excel)</button>
+  <button class="export-link" id="admin-btn" type="button">עריכת המוזמנים (למארגן)</button>
+
+  <div class="admin-panel" id="admin-panel" hidden>
+    <div id="admin-rows"></div>
+    <div class="btn-row">
+      <button class="btn solid" id="admin-save-btn" type="button">שמירת שינויים</button>
+      <button class="btn" id="admin-refresh-btn" type="button">רענון</button>
+    </div>
+  </div>
 
   <div class="footer">
     <div class="sign">מחכה לראות אתכם</div>
@@ -1029,6 +1081,117 @@
       ["ערק", drinkTotals["ערק"]]
     ];
   }
+
+  function escapeHtml(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+
+  /* ---------------- admin panel: edit / delete confirmed RSVPs ---------------- */
+  var adminPanel = document.getElementById("admin-panel");
+  var adminRowsEl = document.getElementById("admin-rows");
+  var adminUnlocked = false;
+  var adminPw = null;
+  var adminData = []; // rows excluding header, each a raw array from the sheet
+
+  function statusOptionsHtml(current){
+    var options = ["מגיע/ה", "לא מגיע/ה", "אעדכן בהמשך"];
+    return options.map(function(o){
+      return '<option value="' + o + '"' + (o === current ? " selected" : "") + ">" + o + "</option>";
+    }).join("");
+  }
+
+  function renderAdminRows(){
+    if (!adminData.length){
+      adminRowsEl.innerHTML = '<p class="admin-empty">עדיין אין אישורים.</p>';
+      return;
+    }
+    adminRowsEl.innerHTML = adminData.map(function(row, idx){
+      return '<div class="admin-row" data-idx="' + idx + '">' +
+        '<input type="text" class="admin-name" value="' + escapeHtml(row[1]) + '" placeholder="שם">' +
+        '<select class="admin-status">' + statusOptionsHtml(row[2]) + '</select>' +
+        '<input type="number" class="admin-guests" min="0" value="' + (parseInt(row[3], 10) || 0) + '">' +
+        '<input type="text" class="admin-drinks" value="' + escapeHtml(row[4]) + '" placeholder="שתייה">' +
+        '<input type="text" class="admin-notes" value="' + escapeHtml(row[5]) + '" placeholder="הערות">' +
+        '<button type="button" class="admin-delete-btn">מחק</button>' +
+        '</div>';
+    }).join("");
+    adminRowsEl.querySelectorAll(".admin-delete-btn").forEach(function(delBtn){
+      delBtn.addEventListener("click", function(){
+        var row = delBtn.closest(".admin-row");
+        var idx = parseInt(row.dataset.idx, 10);
+        adminData.splice(idx, 1);
+        renderAdminRows();
+      });
+    });
+  }
+
+  function loadAdminRows(){
+    return jsonp(SHEET_WEBHOOK_URL + "?pw=" + encodeURIComponent(adminPw)).then(function(rows){
+      if (rows && rows.error) throw new Error("forbidden");
+      adminData = rows.slice(1);
+      renderAdminRows();
+    });
+  }
+
+  document.getElementById("admin-btn").addEventListener("click", function(){
+    if (adminUnlocked){
+      adminPanel.hidden = !adminPanel.hidden;
+      return;
+    }
+    askPassword("סיסמת ניהול:").then(function(pw){
+      if (pw === null) return;
+      adminPw = pw;
+      loadAdminRows().then(function(){
+        adminUnlocked = true;
+        adminPanel.hidden = false;
+      }).catch(function(){
+        customAlert("סיסמה שגויה.");
+      });
+    });
+  });
+
+  document.getElementById("admin-refresh-btn").addEventListener("click", function(){
+    loadAdminRows().catch(function(){ customAlert("רענון נכשל."); });
+  });
+
+  document.getElementById("admin-save-btn").addEventListener("click", function(){
+    var rowEls = adminRowsEl.querySelectorAll(".admin-row");
+    var newRows = Array.prototype.map.call(rowEls, function(rowEl){
+      var idx = parseInt(rowEl.dataset.idx, 10);
+      var orig = adminData[idx] || [];
+      return [
+        orig[0] || "",
+        rowEl.querySelector(".admin-name").value.trim(),
+        rowEl.querySelector(".admin-status").value,
+        rowEl.querySelector(".admin-guests").value,
+        rowEl.querySelector(".admin-drinks").value.trim(),
+        rowEl.querySelector(".admin-notes").value.trim()
+      ];
+    });
+    var saveBtn = document.getElementById("admin-save-btn");
+    var original = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = "שומר…";
+    fetch(SHEET_WEBHOOK_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "replace", pw: adminPw, rows: newRows })
+    }).catch(function(){});
+    setTimeout(function(){
+      loadAdminRows().then(function(){
+        saveBtn.disabled = false;
+        saveBtn.textContent = original;
+        customAlert("נשמר ועודכן.");
+      }).catch(function(){
+        saveBtn.disabled = false;
+        saveBtn.textContent = original;
+        customAlert("השמירה נשלחה, אבל הרענון נכשל - בדוק ידנית בגיליון שזה אכן התעדכן.");
+      });
+    }, 1500);
+  });
 
   document.getElementById("export-btn").addEventListener("click", function(){
     var btn = this;
