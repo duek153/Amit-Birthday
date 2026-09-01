@@ -461,8 +461,36 @@
     box-shadow:var(--shadow);
   }
   .modal-msg{ color:var(--ivory); font-size:15px; margin:0 0 16px; }
+  .modal-input{
+    width:100%;
+    background:var(--surface-2);
+    border:1px solid var(--line-soft);
+    border-radius:3px;
+    color:var(--ivory);
+    padding:11px 12px;
+    font-family:'Assistant',sans-serif;
+    font-size:15px;
+    margin-bottom:16px;
+    text-align:center;
+  }
+  .modal-input:focus{ outline:none; border-color:var(--gold); }
   .modal-actions{ display:flex; gap:10px; }
   .modal-actions .btn{ min-width:0; }
+
+  .export-link{
+    display:block;
+    text-align:center;
+    margin-top:34px;
+    font-size:12px;
+    color:var(--ivory-dim);
+    text-decoration:underline;
+    cursor:pointer;
+    background:none;
+    border:none;
+    width:100%;
+    font-family:'Assistant',sans-serif;
+  }
+  .export-link:hover{ color:var(--gold); }
 </style>
 </head>
 <body>
@@ -556,7 +584,7 @@
   <div class="reveal panel" id="rsvp-panel">
     <span class="eyebrow">אישור הגעה</span>
     <h2 id="rsvp-heading">מגיעים?</h2>
-    <p class="lede">שנייה למלא - האישור יישלח אליי בוואטסאפ.</p>
+    <p class="lede">שנייה למלא.</p>
 
     <form id="rsvp-form">
       <div class="field">
@@ -614,6 +642,8 @@
     </div>
   </div>
 
+  <button class="export-link" id="export-btn" type="button">הורדת רשימת האישורים (Excel)</button>
+
   <div class="footer">
     <div class="sign">מחכה לראות אתכם</div>
     יומולדת 28 לעמית · 17.9 · אריה ורשבסקי 1
@@ -629,21 +659,25 @@
 <div class="modal-overlay" id="modal-overlay" hidden>
   <div class="modal-box">
     <p class="modal-msg" id="modal-msg"></p>
+    <input type="password" id="modal-input" class="modal-input" hidden inputmode="text" autocomplete="off">
     <div class="modal-actions">
+      <button type="button" class="btn" id="modal-cancel">ביטול</button>
       <button type="button" class="btn solid" id="modal-ok">אישור</button>
     </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (function(){
   "use strict";
 
   /* ---------------- config ---------------- */
-  var HOST_PHONE = "972509535349"; // פורמט בינלאומי, בלי + ובלי 0 מוביל
   var EVENT_DATE = new Date(2026, 8, 17, 20, 30, 0); // 17.9.2026, 20:30
   var ADDRESS = "אריה ורשבסקי 1";
   var SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwfffsrhKxnxyd6fMN3PX0LqTb0K0SMHTsKcmlaHKsn-ikYVYgW8gU7fisfnr2P0Zd5/exec";
+  // סיסמה להורדת הרשימה - תואמת ל-EXPORT_PASSWORD בקוד ה-Apps Script בגיליון. תחליף בשניהם יחד אם תרצה לשנות.
+  var EXPORT_PASSWORD = "1966";
 
   function logToSheet(entry){
     if (!SHEET_WEBHOOK_URL) return;
@@ -657,23 +691,61 @@
     } catch(e){}
   }
 
-  /* ---------------- modal (replaces native alert) ---------------- */
+  function jsonp(url){
+    return new Promise(function(resolve, reject){
+      var cbName = "cb_" + Date.now() + "_" + Math.floor(Math.random()*100000);
+      var script = document.createElement("script");
+      var timeout = setTimeout(function(){
+        cleanup();
+        reject(new Error("timeout"));
+      }, 15000);
+      function cleanup(){
+        clearTimeout(timeout);
+        delete window[cbName];
+        script.remove();
+      }
+      window[cbName] = function(data){
+        cleanup();
+        resolve(data);
+      };
+      script.onerror = function(){ cleanup(); reject(new Error("network")); };
+      script.src = url + (url.indexOf("?") >= 0 ? "&" : "?") + "callback=" + cbName;
+      document.body.appendChild(script);
+    });
+  }
+
+  /* ---------------- modal (replaces native alert/prompt) ---------------- */
   var modalOverlay = document.getElementById("modal-overlay");
   var modalMsg = document.getElementById("modal-msg");
+  var modalInput = document.getElementById("modal-input");
+  var modalCancel = document.getElementById("modal-cancel");
   var modalOk = document.getElementById("modal-ok");
   var modalResolve = null;
 
-  function customAlert(message){
+  function openModal(message, withInput){
     modalMsg.textContent = message;
+    modalInput.hidden = !withInput;
+    modalInput.value = "";
+    modalCancel.style.display = withInput ? "" : "none";
     modalOverlay.hidden = false;
+    if (withInput) setTimeout(function(){ modalInput.focus(); }, 30);
     return new Promise(function(resolve){ modalResolve = resolve; });
   }
-  modalOk.addEventListener("click", function(){
+  function closeModal(value){
     modalOverlay.hidden = true;
     var r = modalResolve;
     modalResolve = null;
-    if (r) r();
+    if (r) r(value);
+  }
+  modalOk.addEventListener("click", function(){
+    closeModal(modalInput.hidden ? true : modalInput.value);
   });
+  modalCancel.addEventListener("click", function(){ closeModal(null); });
+  modalInput.addEventListener("keydown", function(e){
+    if (e.key === "Enter"){ e.preventDefault(); closeModal(modalInput.value); }
+  });
+  function customAlert(msg){ return openModal(msg, false); }
+  function askPassword(msg){ return openModal(msg, true); }
 
   /* ---------------- countdown ---------------- */
   function pad(n){ return String(n).padStart(2,"0"); }
@@ -882,25 +954,6 @@
     burstConfetti();
   }
 
-  function whatsappMessage(entry){
-    var statusLabel = entry.status === "coming" ? "מגיע/ה 🎉" : entry.status === "not_coming" ? "לא מגיע/ה" : "אעדכן בהמשך";
-    var lines = [
-      "אישור הגעה ליומולדת 28 לעמית:",
-      "שם: " + entry.name,
-      "סטטוס: " + statusLabel
-    ];
-    if (entry.status === "coming") lines.push("כמות מגיעים: " + entry.guests);
-    if (entry.drinks) lines.push("שתייה: " + entry.drinks);
-    if (entry.notes) lines.push("הערות: " + entry.notes);
-    return lines.join("\n");
-  }
-
-  function sendViaWhatsApp(entry){
-    var url = "https://wa.me/" + HOST_PHONE + "?text=" + encodeURIComponent(whatsappMessage(entry));
-    window.open(url, "_blank");
-    showThanks(entry.name);
-  }
-
   document.getElementById("rsvp-form").addEventListener("submit", function(e){
     e.preventDefault();
     var name = document.getElementById("f-name").value.trim();
@@ -929,7 +982,36 @@
       notes: document.getElementById("f-notes").value.trim()
     };
     logToSheet(entry);
-    sendViaWhatsApp(entry);
+    showThanks(entry.name);
+  });
+
+  document.getElementById("export-btn").addEventListener("click", function(){
+    var btn = this;
+    askPassword("סיסמה להורדת הרשימה:").then(function(pw){
+      if (pw === null) return;
+      var original = btn.textContent;
+      btn.textContent = "מוריד…";
+      jsonp(SHEET_WEBHOOK_URL + "?pw=" + encodeURIComponent(pw))
+        .then(function(rows){
+          btn.textContent = original;
+          if (rows && rows.error){
+            customAlert("סיסמה שגויה.");
+            return;
+          }
+          if (!rows || !rows.length){
+            customAlert("אין עדיין אישורים ברשימה.");
+            return;
+          }
+          var ws = XLSX.utils.aoa_to_sheet(rows);
+          var wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "אישורים");
+          XLSX.writeFile(wb, "רשימת-אורחים-יומולדת-28.xlsx");
+        })
+        .catch(function(){
+          btn.textContent = original;
+          customAlert("ההורדה נכשלה, נסה שוב.");
+        });
+    });
   });
 
 })();
